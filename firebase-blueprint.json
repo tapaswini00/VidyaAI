@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User learning statistics, streak, level, exp, and auth info.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "level": { "type": "integer" },
+        "exp": { "type": "integer" },
+        "streak": { "type": "integer" },
+        "lastActive": { "type": "string" },
+        "classGrade": { "type": "string" },
+        "appLanguage": { "type": "string" },
+        "tutorStyle": { "type": "string" },
+        "isOnboarded": { "type": "boolean" },
+        "favoriteSubjects": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "weeklyGoal": { "type": "string" },
+        "timetableSlots": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      },
+      "required": ["name", "email", "avatar", "level", "exp", "streak", "lastActive"]
+    },
+    "SavedContent": {
+      "title": "Saved Learning Content",
+      "description": "Textbook summaries, interactive concept reviews, and study notes saved by a student.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "topic": { "type": "string" },
+         "timestamp": { "type": "string" },
+        "summary": { "type": "string" },
+        "detailedExplanation": { "type": "string" },
+        "keyPoints": { "type": "array" },
+        "modelId": { "type": "string" },
+        "notes": { "type": "string" },
+        "highlightedText": { "type": "string" }
+      },
+      "required": ["id", "type", "topic", "timestamp"]
+    },
+    "ProgressHistory": {
+      "title": "Progress History Log",
+      "description": "Daily audit entry of student activity logs and experience gains.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "topic": { "type": "string" },
+        "actionType": { "type": "string" },
+        "details": { "type": "string" },
+        "expGained": { "type": "integer" }
+      },
+      "required": ["id", "timestamp", "topic", "actionType", "details", "expGained"]
+    },
+    "ChatSession": {
+      "title": "Chat History Session",
+      "description": "A saved tutoring chat history session containing complete messages thread.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "lastMessagePreview": { "type": "string" },
+        "messages": {
+          "type": "array"
+        }
+      },
+      "required": ["id", "title", "timestamp", "lastMessagePreview", "messages"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "The user progress profile."
+    },
+    "/users/{userId}/savedVault/{vaultId}": {
+      "schema": "SavedContent",
+      "description": "The archived study items for offline/online review."
+    },
+    "/users/{userId}/history/{historyId}": {
+      "schema": "ProgressHistory",
+      "description": "User activity audit log of experience gains."
+    },
+    "/users/{userId}/chatSessions/{sessionId}": {
+      "schema": "ChatSession",
+      "description": "User's persistent automated chat histories."
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "VIDYA: Interactive AR Learning Tutor",
+  "description": "An interactive, friendly AI-powered AR-visual learning app featuring 360° 3D models, circle-to-select questioning, scan processing, quizzes, and offline vaults.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

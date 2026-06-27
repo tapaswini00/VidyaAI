@@ -1,0 +1,136 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global default-deny safety net (The First Pillar)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Reuseable, hardened primitive helpers (The Third & Eleventh Pillars)
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Restricts read/list access to the owner of the account
+    function isOwner(userId) {
+      return isSignedIn()
+        && (
+          request.auth.uid == userId 
+          || (request.auth.token.email != null && request.auth.token.email == userId)
+        );
+    }
+
+    // Enforces verified ownership for standard write operations matching constraints
+    function isVerifiedWrite(userId) {
+      return isOwner(userId);
+    }
+
+    // Strictly restricts standard sub-document IDs to prevent poisoning/injection
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Custom sanitization of email IDs which contain dots, at symbols, and plus signs
+    function isValidEmailId(id) {
+      return id is string && id.size() <= 150 && id.matches('^[a-zA-Z0-9_\\-\\+\\.\\@]+$');
+    }
+
+    // 3. Validation Blueprints (The Second Pillar)
+
+    // Validates a user's student profile payload
+    function isValidStudent(data) {
+      return data.keys().hasAll(['name', 'email', 'avatar', 'level', 'exp', 'streak', 'lastActive'])
+        && data.keys().size() <= 15
+        && data.name is string && data.name.size() <= 200
+        && data.email is string && data.email.size() <= 200 && request.auth.token.email != null && data.email == request.auth.token.email
+        && data.avatar is string && data.avatar.size() <= 100
+        && (data.level is int || data.level is float)
+        && (data.exp is int || data.exp is float)
+        && (data.streak is int || data.streak is float)
+        && (data.lastActive == null || (data.lastActive is string && data.lastActive.size() <= 100))
+        && (!data.keys().hasAny(['classGrade']) || (data.classGrade is string && data.classGrade.size() <= 100))
+        && (!data.keys().hasAny(['appLanguage']) || (data.appLanguage is string && data.appLanguage.size() <= 10))
+        && (!data.keys().hasAny(['tutorStyle']) || (data.tutorStyle is string && data.tutorStyle.size() <= 100))
+        && (!data.keys().hasAny(['isOnboarded']) || data.isOnboarded is bool)
+        && (!data.keys().hasAny(['favoriteSubjects']) || (data.favoriteSubjects is list && data.favoriteSubjects.size() <= 50 && (data.favoriteSubjects.size() == 0 || data.favoriteSubjects[0] is string)))
+        && (!data.keys().hasAny(['weeklyGoal']) || (data.weeklyGoal is string && data.weeklyGoal.size() <= 200))
+        && (!data.keys().hasAny(['timetableSlots']) || (data.timetableSlots is list && data.timetableSlots.size() <= 100 && (data.timetableSlots.size() == 0 || data.timetableSlots[0] is map)));
+    }
+
+    // Validates textbook summaries and interactive review notes in student vault
+    function isValidSavedContent(data) {
+      return data.keys().hasAll(['id', 'type', 'topic', 'timestamp'])
+        && data.keys().size() <= 10
+        && data.id is string && data.id.size() <= 128
+        && data.type is string && data.type.size() <= 100
+        && data.topic is string && data.topic.size() <= 500
+        && data.timestamp is string && data.timestamp.size() <= 100
+        && (!data.keys().hasAny(['summary']) || (data.summary is string && data.summary.size() <= 10000))
+        && (!data.keys().hasAny(['detailedExplanation']) || (data.detailedExplanation is string && data.detailedExplanation.size() <= 20000))
+        && (!data.keys().hasAny(['keyPoints']) || (data.keyPoints is list && data.keyPoints.size() <= 100 && (data.keyPoints.size() == 0 || data.keyPoints[0] is string)))
+        && (!data.keys().hasAny(['modelId']) || (data.modelId is string && data.modelId.size() <= 128))
+        && (!data.keys().hasAny(['notes']) || (data.notes is string && data.notes.size() <= 10000))
+        && (!data.keys().hasAny(['highlightedText']) || (data.highlightedText is string && data.highlightedText.size() <= 10000));
+    }
+
+    // Validates gamified activity history records and EXP log events
+    function isValidHistory(data) {
+      return data.keys().hasAll(['id', 'timestamp', 'topic', 'actionType', 'details', 'expGained'])
+        && data.keys().size() == 6
+        && data.id is string && data.id.size() <= 128
+        && data.timestamp is string && data.timestamp.size() <= 100
+        && data.topic is string && data.topic.size() <= 500
+        && data.actionType is string && data.actionType.size() <= 100
+        && data.details is string && data.details.size() <= 5000
+        && (data.expGained is int || data.expGained is float);
+    }
+
+    // Validates study tutoring chat interactions and automated transcripts 
+    function isValidChatSession(data) {
+      return data.keys().hasAll(['id', 'title', 'timestamp', 'lastMessagePreview', 'messages'])
+        && data.keys().size() <= 10
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 500
+        && data.timestamp is string && data.timestamp.size() <= 100
+        && data.lastMessagePreview is string && data.lastMessagePreview.size() <= 5000
+        && data.messages is list && data.messages.size() <= 1000 && (data.messages.size() == 0 || data.messages[0] is map);
+    }
+
+    // 4. Secured Path Rules for Students (The Fourth, Fifth, & Eighth Pillars)
+    match /users/{userId} {
+      // Profile access is strictly owner-only
+      allow get: if isOwner(userId);
+      allow create: if isVerifiedWrite(userId) && isValidEmailId(userId) && isValidStudent(request.resource.data);
+      allow update: if isVerifiedWrite(userId) && isValidStudent(request.resource.data) && request.resource.data.email == resource.data.email;
+      allow delete: if isVerifiedWrite(userId);
+
+      // Child subcollections containing saved notes (The Master Gate Pattern)
+      match /savedVault/{vaultId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isVerifiedWrite(userId) && isValidId(vaultId) && isValidSavedContent(request.resource.data);
+        allow update: if isVerifiedWrite(userId) && isValidId(vaultId) && isValidSavedContent(request.resource.data) && request.resource.data.id == resource.data.id;
+        allow delete: if isVerifiedWrite(userId) && isValidId(vaultId);
+      }
+
+      // Progress history list logs
+      match /history/{historyId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isVerifiedWrite(userId) && isValidId(historyId) && isValidHistory(request.resource.data);
+        allow update: if isVerifiedWrite(userId) && isValidId(historyId) && isValidHistory(request.resource.data) && request.resource.data.id == resource.data.id;
+        allow delete: if isVerifiedWrite(userId) && isValidId(historyId);
+      }
+
+      // Chat transcripts logs
+      match /chatSessions/{sessionId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isVerifiedWrite(userId) && isValidId(sessionId) && isValidChatSession(request.resource.data);
+        allow update: if isVerifiedWrite(userId) && isValidId(sessionId) && isValidChatSession(request.resource.data) && request.resource.data.id == resource.data.id;
+        allow delete: if isVerifiedWrite(userId) && isValidId(sessionId);
+      }
+    }
+  }
+}
